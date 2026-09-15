@@ -6,7 +6,7 @@ from discord.ext import commands, tasks
 import yt_dlp
 
 # إعدادات البوت الآمنة
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1549244979879084033
 
 intents = discord.Intents.default()
