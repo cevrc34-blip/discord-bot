@@ -1,11 +1,12 @@
 import asyncio
 import datetime
+import os
 import discord
 from discord.ext import commands, tasks
 import yt_dlp
 
-# إعدادات البوت جاهزة بالكامل
-TOKEN = "MTU0ODg0MDQ4ODE1MTQxNjg4Mw.GNzvDT.WAfMzz6B5GCrptHqBDZUTFWbvbjiOIfzIw6PEs"
+# إعدادات البوت الآمنة
+TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = 1549244979879084033
 
 intents = discord.Intents.default()
@@ -13,7 +14,6 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
 tracked_videos = {}
-
 
 def get_video_info(url):
     """جلب معلومات الفيديو باستخدام yt-dlp"""
@@ -25,96 +25,58 @@ def get_video_info(url):
                 "id": info.get("id"),
                 "title": info.get("title"),
                 "channel": info.get("uploader"),
-                "subs": f"{info.get('channel_follower_count', 0):,}",
-                "views": f"{info.get('view_count', 0):,}",
-                "likes": f"{info.get('like_count', 0):,}",
-                "comments": f"{info.get('comment_count', 0):,}",
-                "url": url,
+                "uploader_url": info.get("uploader_url"),
+                "thumbnail": info.get("thumbnail"),
+                "duration": info.get("duration"),
+                "status": "Available"
             }
-        except Exception:
-            return None
-
+        except Exception as e:
+            return {"status": "Unavailable", "error": str(e)}
 
 @bot.event
 async def on_ready():
-    print(f"Bot Online: {bot.user.name}")
-    check_videos_status.start()
+    print(f"Logged in as {bot.user.name}")
+    check_videos.start()
 
-
-@bot.tree.command(
-    name="trackvideo", description="Start tracking a YouTube video"
-)
-async def trackvideo(interaction: discord.Interaction, url: str):
-    await interaction.response.defer()
-
-    info = get_video_info(url)
-    if not info:
-        await interaction.followup.send(
-            "❌ Failed to fetch video. Invalid link or video already removed."
-        )
+@bot.command()
+async def track(ctx, url: str):
+    """أمر إضافة فيديو للمراقبة"""
+    if url in tracked_videos:
+        await ctx.send("This video is already being tracked!")
         return
 
-    video_id = info["id"]
-    tracked_videos[video_id] = {
-        **info,
-        "start_time": datetime.datetime.now(datetime.timezone.utc),
-    }
+    await ctx.send("Analyzing video...")
+    info = await asyncio.to_thread(get_video_info, url)
 
-    # نص البدء الأبيض بالإنجليزية
-    msg_text = (
-        f"⏱️ Tracking **{info['title']}**\n"
-        f"📹 Channel: {info['channel']}\n"
-        f"👥 Subscribers: {info['subs']}"
-    )
-    await interaction.followup.send(msg_text)
+    if info["status"] == "Available":
+        tracked_videos[url] = info
+        await ctx.send(f"Successfully started tracking: **{info['title']}**")
+    else:
+        await ctx.send(f"Failed to track video: {info.get('error')}")
 
-
-@tasks.loop(seconds=3)
-async def check_videos_status():
+@tasks.loop(minutes=5)
+async def check_videos():
+    """فحص الفيديوهات كل 5 دقائق"""
     channel = bot.get_channel(CHANNEL_ID)
-    if not channel or not tracked_videos:
+    if not channel:
         return
 
-    to_remove = []
+    for url, data in list(tracked_videos.items()):
+        current_info = await asyncio.to_thread(get_video_info, url)
 
-    for video_id, data in list(tracked_videos.items()):
-        current_info = get_video_info(data["url"])
-
-        # إذا تم حذف الفيديو
-        if current_info is None:
-            now = datetime.datetime.now(datetime.timezone.utc)
-            duration = now - data["start_time"]
-
-            hours, remainder = divmod(int(duration.total_seconds()), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_str = f"{hours}h {minutes}m {seconds}s"
-
-            # كارت الحذف الأحمر المطابق للصورة الأولى
+        if current_info["status"] == "Unavailable":
             embed = discord.Embed(
-                title="🚨 Video Removed!", color=discord.Color.red()
+                title="🚨 Tracked Video Removed/Unavailable!",
+                color=discord.Color.red(),
+                timestamp=datetime.datetime.utcnow()
             )
-
-            embed.description = (
-                f"🚫 **Video Removed / Unavailable**\n\n"
-                f"**{data['title']}**\n"
-                f"by **{data['channel']}**\n\n"
-                f"[Original Link]({data['url']})\n\n"
-                f"📊 **Last Known Stats**\n"
-                f"📺 Views: {data['views']}\n"
-                f"👍 Likes: {data['likes']}\n"
-                f"💬 Comments: {data['comments']}\n"
-                f"👥 Subscribers: {data['subs']}\n"
-                f"📹 Channel\n{data['channel']}\n\n"
-                f"⏱️ **Removed in**\n{time_str}\n\n"
-                f"Detected at {now.strftime('%Y-%m-%d %H:%M:%S UTC')}"
-            )
+            embed.add_field(name="Video Title", value=data.get("title", "Unknown"), inline=False)
+            embed.add_field(name="Channel", value=data.get("channel", "Unknown"), inline=True)
+            embed.add_field(name="URL", value=url, inline=False)
+            embed.set_footer(text="Video Monitoring System")
 
             await channel.send(embed=embed)
-            to_remove.append(video_id)
+            del tracked_videos[url]
 
-    for vid in to_remove:
-        if vid in tracked_videos:
-            del tracked_videos[vid]
-
-
-bot.run(TOKEN)
+if __name__ == "__main__":
+    bot.run(TOKEN)
