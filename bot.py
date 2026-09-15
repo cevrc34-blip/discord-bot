@@ -19,7 +19,10 @@ DATABASE = os.getenv("DATABASE", "bot.db")
 if not DISCORD_TOKEN or not YOUTUBE_API_KEY:
     raise RuntimeError("Missing DISCORD_TOKEN or YOUTUBE_API_KEY in environment variables.")
 
+# Privileged Intents configuration
 intents = discord.Intents.default()
+intents.message_content = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 db = sqlite3.connect(DATABASE, check_same_thread=False)
@@ -151,7 +154,6 @@ async def check_all_videos():
         return
 
     async with aiohttp.ClientSession() as session:
-        # YouTube allows multiple video IDs in one videos.list request.
         for start in range(0, len(rows), 50):
             batch = rows[start:start + 50]
             ids = ",".join(row["video_id"] for row in batch)
@@ -199,8 +201,6 @@ async def check_all_videos():
                     ))
 
                 else:
-                    # Require two consecutive failed checks before alerting.
-                    # This helps reduce false removal alerts.
                     failures = row["failure_count"] + 1
 
                     if failures >= 2:
