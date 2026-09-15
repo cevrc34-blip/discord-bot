@@ -5,7 +5,7 @@ from discord.ext import commands, tasks
 import yt_dlp
 
 # إعدادات البوت جاهزة بالكامل
-TOKEN = "MTU0ODg0MDQ4ODE1MTQxNjg4Mw.GsBFVD.v7POZj8ibVP0-gUgrrwPsw1X0RxhkK8CiADvA0"
+TOKEN = "MTU0ODg0MDQ4ODE1MTQxNjg4Mw.GNzvDT.WAfMzz6B5GCrptHqBDZUTFWbvbjiOIfzIw6PEs"
 CHANNEL_ID = 1549244979879084033
 
 intents = discord.Intents.default()
